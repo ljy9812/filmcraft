@@ -9,8 +9,10 @@
 //! `CRAFT_FONTS_DIR` an error.
 //!
 //! Native builds embed every font. The web (wasm32) build embeds only the UI font (BIZ UDPGothic
-//! Regular, ~4.5 MB) to stay under the web size budget (Cloudflare serves files up to 25 MiB).
-//! Only the local directory is read: no network.
+//! Regular, ~4.5 MB) and the Hans interface face (WenQuanYi Micro Hei, ~4.4 MB) to stay under the
+//! web size budget (Cloudflare serves files up to 25 MiB); without the Hans face the zh interface
+//! renders as tofu, as the browser has no system fonts. Only the local directory is read: no
+//! network.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -51,7 +53,10 @@ fn craft_fonts(dir: &std::path::Path) -> Result<String, String> {
         let [family, style, file, scripts, ..] = f.as_slice() else {
             return Err(format!("malformed manifest line: {line}"));
         };
-        if wasm && !(*family == "BIZ UDPGothic" && *style == "Regular") {
+        // The Hans face rides along on wasm: the browser has no system fonts, so without it the
+        // zh interface renders as tofu.
+        let hans = scripts.split(',').any(|s| s.trim() == "Hans");
+        if wasm && !hans && !(*family == "BIZ UDPGothic" && *style == "Regular") {
             continue;
         }
         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;
