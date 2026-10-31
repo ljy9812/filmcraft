@@ -38,6 +38,9 @@ interface ExportMsg {
 //    document-suite rounds:
 //    - wasm contains showSaveFilePicker/createWritable/suggestedName
 //      → add the savepicker neuter block (wordcraft W1 fix) to this script
+//    - wasm calls window.showOpenFilePicker for imports (filmcraft FC-2 class:
+//      has_fsa_picker() = Reflect.has probe, FSA-open bridge broken on ArkWeb)
+//      → add the openpicker neuter block (delete own + Window.prototype)
 //    - wasm auto-detects UI language (language field in prefs/localStorage)
 //      → add a one-shot FORCE_EN injection (pdfcraft P2 fix)
 //    - wasm has a font_store channel ("no stored fonts" string present)
@@ -46,6 +49,21 @@ const START_SCRIPT: string = `(function() {
   if (window.__pc_hook) { return; }
   window.__pc_hook = true;
   console.log('[pc] hook installed');
+  // FC-2 openpicker neuter: ArkWeb implements window.showOpenFilePicker and
+  // launches its own system picker, but the picked file never reaches the page
+  // (promise/handles silently broken post-selection — filmcraft swallows the
+  // failure because it treats it as user-cancel). filmcraft probes the picker
+  // with Reflect.has, so a value-undefined neuter is not enough: delete the
+  // property from the own slot AND Window.prototype to flip the probe to
+  // false. The app then falls back to its own <input type=file> element, whose
+  // click() fires our onShowFileSelector bridge (the pdfcraft/rfd path, proven
+  // on this device). Desktop-validated end-to-end: neutralized Edge takes the
+  // input path and the import decodes fine.
+  console.log('[pc] openpicker pre: has=' + Reflect.has(window, 'showOpenFilePicker'));
+  try { delete window.showOpenFilePicker; } catch (e) {}
+  try { delete Window.prototype.showOpenFilePicker; } catch (e) {}
+  try { delete window.__proto__.showOpenFilePicker; } catch (e) {}
+  console.log('[pc] openpicker post: has=' + Reflect.has(window, 'showOpenFilePicker'));
   function pcSend(href, name, src) {
     var port = window.__pc_port;
     console.log('[pc] download click: ' + name + ' port=' + (port ? 'yes' : 'NO') + (src ? ' [' + src + ']' : ''));
